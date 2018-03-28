@@ -1,20 +1,21 @@
 //g++ rdply.cpp drawFile.cpp -o a.x -lGL -lm -lGLU -lglut
 #include "rdply.h"
-/*
 
-#include <fstream>
-#include <sstream>
-
-#include <vector>
-*/
 #include <iostream>
 #include <string>
 #include <GL/glut.h>
-//#include <glm/glm.hpp>
 #include <glm/ext.hpp>
-
+#include <cmath>
 
 int dbg;//DEBUG thing
+int FIRST = 0;
+float Angle;
+
+struct mColor{
+  float r,g,b;
+};
+
+struct mColor Lite, Dark, MC;
 
 struct Cord3{
   float x,y,z;
@@ -25,8 +26,8 @@ struct Cord3 Centroid;
 glm::vec4 *VERTS;
 struct Face *FACES;
 
-//glm::mat4 TraMaster;//TODO Remove This?
-
+//================================
+//Funamental Transforms
 glm::vec4 Translate(glm::vec4 v, float Dx, float Dy, float Dz){
   float tmpT[16] = {
     1.0f, 0.0f, 0.0f, Dx,
@@ -80,6 +81,8 @@ glm::vec4 Rotate(glm::vec4 v, char Plane, float R){
   return result;
 };
 
+//================================
+//What actually gets called by main and keyF
 void findCentroid(){
   float Ox, Oy, Oz;
   Ox = 0.0f; Oy = 0.0f; Oz = 0.0f;
@@ -163,6 +166,58 @@ float getInitScale(){
     return Biggie;
 }
 
+//================================
+//New Realism Shtuff
+glm::vec3 getSurfaceNormal(glm::vec4 p1, glm::vec4 p2, glm::vec4 p3){
+  glm::vec4 V,W;
+  glm::vec3 Normal;
+  V = p2 - p1;
+  W = p3 - p1;
+
+  Normal.x = (V.y * W.z) - (V.z * W.y);
+  Normal.y = (V.z * W.x) - (V.x * W.z);
+  Normal.z = (V.x * W.y) - (V.y * W.x);
+
+  return Normal;
+}
+
+float getAngle(glm::vec3 a, glm::vec3 b){
+  float dot = (a.x * b.x) + (a.y * b.y) + (a.z * b.z);
+  float mgA = sqrt(pow(a.x, 2.0) + pow(a.y, 2.0) + pow(a.z, 2.0));
+  float mgB = sqrt(pow(b.x, 2.0) + pow(b.y, 2.0) + pow(b.z, 2.0));
+  float ans = dot / (mgA * mgB);
+  return ans;
+}//If its less than or equal to 0 dont render
+
+float isTriFacing(glm::vec4 p1, glm::vec4 p2, glm::vec4 p3){
+  glm::vec3 N, Cam;
+  float T;
+  N = getSurfaceNormal(p1,p2,p3);
+  Cam = glm::vec3(0.0,0.0,1.0);
+  T = getAngle(N, Cam);
+  return T;
+}
+
+void setColors(){
+  //Lite = {0.957f, 0.259f, 0.725f};//A nice Pink
+  //Dark = {0.259f, 0.714f, 0.957f};//A deep Blue
+  //MC = Dark;
+}
+//TODO make invisible if behind the centroid?
+int behindCentroid(glm::vec4 p1, glm::vec4 p2, glm::vec4 p3){
+  if(p1[2] < Centroid.z * 0.1)
+    return 0;
+  if(p2[2] < Centroid.z * 0.1)
+    return 0;
+  if(p3[2] < Centroid.z * 0.1)
+    return 0;
+  else
+    return 1;
+}
+
+
+//================================
+//GLM Functions
 void keyF(unsigned char key, int x, int y){
   printf("keypress: %d\n", key);
 
@@ -221,15 +276,20 @@ void keyF(unsigned char key, int x, int y){
 }
 
 void render(){
-  glClearColor(0.0, 0.0, 0.0, 0.0);//Black
+  glClearColor(0.957, 0.259, 0.725, 0.0);//Black
   glClear(GL_COLOR_BUFFER_BIT);
   glBegin(GL_TRIANGLES);
   for(int i = 0; i < face_Total(); i++){
-    float grn = (float) i/ (float)face_Total();//TODO
-    glColor3f(1.0f,grn,0.0);
-    glVertex3f(VERTS[FACES[i].a][0],VERTS[FACES[i].a][1],VERTS[FACES[i].a][2]);
-    glVertex3f(VERTS[FACES[i].b][0],VERTS[FACES[i].b][1],VERTS[FACES[i].b][2]);
-    glVertex3f(VERTS[FACES[i].c][0],VERTS[FACES[i].c][1],VERTS[FACES[i].c][2]);
+    Angle = isTriFacing(VERTS[FACES[i].a],VERTS[FACES[i].b],VERTS[FACES[i].c]);
+    MC.r = (-1.0 * pow(Angle,2.0)) + 1;
+    MC.g = (-1.0 * pow(Angle,2.0)) + 1;
+    MC.b = (-1.0 * pow(Angle,2.0)) + 1;
+    if(Angle > 0.0){
+      glColor3f(MC.r,MC.g,MC.b);
+      glVertex3f(VERTS[FACES[i].a][0],VERTS[FACES[i].a][1],VERTS[FACES[i].a][2]);
+      glVertex3f(VERTS[FACES[i].b][0],VERTS[FACES[i].b][1],VERTS[FACES[i].b][2]);
+      glVertex3f(VERTS[FACES[i].c][0],VERTS[FACES[i].c][1],VERTS[FACES[i].c][2]);
+    }
   }
   glEnd();
   glutSwapBuffers();
@@ -248,6 +308,8 @@ void printInf(std::string s){
   }
 }
 
+//================================
+//El Maino Methado
 int main(int argc, char **argv, char **envp){
   dbg = 1;//Turn Debugging on and off, ie the print statements
   printInf("Debugging is ON\n");
@@ -285,6 +347,8 @@ int main(int argc, char **argv, char **envp){
       VERTS[i][2] = (VERTS[i][2]) / (BIG * 2.0f);
     }
   }
+
+  setColors();
 
   glutInit(&argc, argv);
   glutInitWindowSize(750,750);
